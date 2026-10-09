@@ -81,6 +81,14 @@ servingEngineSpec:
     limitGPUMemPercentage: "80"
     # -- Requires HAMi. The limit of GPU cores. Each unit equals to 1% device cores. https://project-hami.io/docs/userguide/NVIDIA-device/specify-device-core-usage
     limitGPUCores: "10"
+    # -- Deploy this model as a StatefulSet instead of a Deployment. Intended for
+    # storage setups that only offer ReadWriteOnce (RWO) volumes and no shared
+    # filesystem: every replica then receives its own PVC through
+    # volumeClaimTemplates, so replicaCount can be raised without RWX storage.
+    # Not compatible with raySpec, pvcExistingClaimName, or a non-string pvcStorage.
+    statefulSet:
+      # -- Whether to render a StatefulSet instead of a Deployment for this model
+      enabled: false
     # -- The amount of storage requested for the model
     pvcStorage: "50Gi"
     # -- The access mode policy for the mounted volume.

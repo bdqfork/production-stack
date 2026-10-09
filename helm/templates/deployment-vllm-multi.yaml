@@ -2,6 +2,10 @@
 {{- range $modelSpec := .Values.servingEngineSpec.modelSpec }}
 {{- if ne $modelSpec.enabled false }}
 {{- if not (and (hasKey $modelSpec "raySpec") $modelSpec.raySpec.enabled) }}
+{{- $statefulSet := false }}
+{{- if and (hasKey $modelSpec "statefulSet") $modelSpec.statefulSet.enabled }}
+{{- $statefulSet = true }}
+{{- end }}
 {{- $kv_role := "kv_both" }}
 {{- $kv_rank := 0 }}
 {{- $kv_parallel_size := 1 }}
@@ -13,9 +17,9 @@
 {{- with $ }}
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: {{ ternary "StatefulSet" "Deployment" $statefulSet }}
 metadata:
-  name: "{{ .Release.Name }}-{{$modelSpec.name}}-deployment-vllm"
+  name: "{{ .Release.Name }}-{{$modelSpec.name}}-{{ ternary "statefulset" "deployment" $statefulSet }}-vllm"
   namespace: {{ .Release.Namespace }}
   {{- with $modelSpec.annotations }}
   annotations:
@@ -30,17 +34,58 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
+{{- if $statefulSet }}
+  serviceName: "{{ .Release.Name }}-{{ $modelSpec.name }}-engine-service"
+{{- end }}
 {{- if not (and $modelSpec.keda $modelSpec.keda.enabled) }}
   replicas: {{ $modelSpec.replicaCount }}
 {{- end }}
+{{- if $statefulSet }}
+  updateStrategy:
+    type: RollingUpdate
+{{- else }}
   {{- include "chart.engineStrategy" . | nindent 2 }}
+{{- end }}
   selector:
     matchLabels:
       model: {{ $modelSpec.name }}
       helm-release-name: {{ .Release.Name }}
     {{- include "chart.engineStandardLabels" (dict "releaseName" .Release.Name "modelName" $modelSpec.name "chartName" .Chart.Name) | nindent 6 }}
     {{- include "chart.engineLabels" . | nindent 6 }}
+{{- if not $statefulSet }}
   progressDeadlineSeconds: 1200
+{{- end }}
+{{- if and $statefulSet (hasKey $modelSpec "pvcStorage") (kindIs "string" $modelSpec.pvcStorage) (not (empty $modelSpec.pvcStorage)) }}
+  volumeClaimTemplates:
+    - metadata:
+        name: "{{ .Release.Name }}-storage"
+        {{- if not (empty $modelSpec.pvcLabels) }}
+        labels:
+          {{- toYaml $modelSpec.pvcLabels | nindent 10 }}
+        {{- end }}
+        {{- if not (empty $modelSpec.pvcAnnotations) }}
+        annotations:
+          {{- toYaml $modelSpec.pvcAnnotations | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- if $modelSpec.pvcAccessMode }}
+          {{- toYaml $modelSpec.pvcAccessMode | nindent 10 }}
+          {{- else }}
+          - ReadWriteOnce
+          {{- end }}
+        resources:
+          requests:
+            storage: {{ $modelSpec.pvcStorage }}
+        {{- if hasKey $modelSpec "storageClass" }}
+        storageClassName: "{{ $modelSpec.storageClass }}"
+        {{- end }}
+        {{- if not (empty $modelSpec.pvcMatchLabels) }}
+        selector:
+          matchLabels:
+            {{- toYaml $modelSpec.pvcMatchLabels | nindent 12 }}
+        {{- end }}
+{{- end }}
   template:
     metadata:
       {{- with $modelSpec.podAnnotations }}
@@ -471,10 +516,11 @@ spec:
       imagePullSecrets:
         - name: {{ $modelSpec.imagePullSecret }}
       {{- end }}
-      {{- if or (hasKey $modelSpec "pvcStorage") (and $modelSpec.vllmConfig (hasKey $modelSpec.vllmConfig "tensorParallelSize")) (hasKey $modelSpec "chatTemplate") (hasKey $modelSpec "extraVolumes") $modelSpec.extraVolumes $.Values.sharedPvcStorage.enabled }}
+      {{- $mountPvcVolume := and (hasKey $modelSpec "pvcStorage") (or (not $statefulSet) (kindIs "map" $modelSpec.pvcStorage) $modelSpec.pvcExistingClaimName) }}
+      {{- if or $mountPvcVolume (and $modelSpec.vllmConfig (hasKey $modelSpec.vllmConfig "tensorParallelSize")) (hasKey $modelSpec "chatTemplate") (hasKey $modelSpec "extraVolumes") $modelSpec.extraVolumes $.Values.sharedPvcStorage.enabled }}
       volumes:
       {{- end}}
-        {{- if hasKey $modelSpec "pvcStorage" }}
+        {{- if $mountPvcVolume }}
         - name: {{ .Release.Name }}-storage
         {{- if and (kindIs "map" $modelSpec.pvcStorage) (hasKey $modelSpec.pvcStorage "emptyDir") }}
           emptyDir:

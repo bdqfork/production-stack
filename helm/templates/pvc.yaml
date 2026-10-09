@@ -2,7 +2,11 @@
 {{- if .Values.servingEngineSpec.enableEngine -}}
 {{- range $modelSpec := .Values.servingEngineSpec.modelSpec }}
 {{- with $ -}}
-{{- if and (hasKey $modelSpec "pvcStorage") (not (empty $modelSpec.pvcStorage)) (kindIs "string" $modelSpec.pvcStorage) (empty $modelSpec.pvcExistingClaimName) }}
+{{- $statefulSet := false }}
+{{- if and (hasKey $modelSpec "statefulSet") $modelSpec.statefulSet.enabled }}
+{{- $statefulSet = true }}
+{{- end }}
+{{- if and (not $statefulSet) (hasKey $modelSpec "pvcStorage") (not (empty $modelSpec.pvcStorage)) (kindIs "string" $modelSpec.pvcStorage) (empty $modelSpec.pvcExistingClaimName) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

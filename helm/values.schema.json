@@ -1559,6 +1559,16 @@
                                 "description": "The size of the shared memory",
                                 "type": "string"
                             },
+                            "statefulSet": {
+                                "description": "Deploy this model as a StatefulSet instead of a Deployment. Intended for storage setups that only offer ReadWriteOnce (RWO) volumes and no shared filesystem: every replica then receives its own PVC through volumeClaimTemplates, so replicaCount can be raised without RWX storage. Not compatible with raySpec, pvcExistingClaimName, or a non-string pvcStorage.",
+                                "type": "object",
+                                "properties": {
+                                    "enabled": {
+                                        "description": "Whether to render a StatefulSet instead of a Deployment for this model",
+                                        "type": "boolean"
+                                    }
+                                }
+                            },
                             "storageClass": {
                                 "description": "The storage class of the PVC",
                                 "type": "string"

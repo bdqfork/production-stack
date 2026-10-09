@@ -1,0 +1,102 @@
+suite: test StatefulSet rendering for modelSpec
+templates:
+  - deployment-vllm-multi.yaml
+tests:
+  - it: renders a Deployment by default when statefulSet is not set
+    release:
+      name: vllm
+    set:
+      servingEngineSpec:
+        enableEngine: true
+        modelSpec:
+          - name: "test-model"
+            repository: "vllm/vllm-openai"
+            tag: "latest"
+            modelURL: "facebook/opt-125m"
+            replicaCount: 1
+            requestCPU: 1
+            requestMemory: "1Gi"
+            requestGPU: 1
+            pvcStorage: "50Gi"
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: kind
+          value: Deployment
+      - documentIndex: 0
+        equal:
+          path: metadata.name
+          value: vllm-test-model-deployment-vllm
+      - documentIndex: 0
+        notExists:
+          path: spec.serviceName
+      - documentIndex: 0
+        notExists:
+          path: spec.volumeClaimTemplates
+      - documentIndex: 0
+        equal:
+          path: spec.progressDeadlineSeconds
+          value: 1200
+
+  - it: renders a StatefulSet when statefulSet.enabled is true
+    release:
+      name: vllm
+    set:
+      servingEngineSpec:
+        enableEngine: true
+        modelSpec:
+          - name: "test-model"
+            statefulSet:
+              enabled: true
+            repository: "vllm/vllm-openai"
+            tag: "latest"
+            modelURL: "facebook/opt-125m"
+            replicaCount: 2
+            requestCPU: 1
+            requestMemory: "1Gi"
+            requestGPU: 1
+            pvcStorage: "50Gi"
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: kind
+          value: StatefulSet
+      - documentIndex: 0
+        equal:
+          path: metadata.name
+          value: vllm-test-model-statefulset-vllm
+      - documentIndex: 0
+        equal:
+          path: spec.serviceName
+          value: vllm-test-model-engine-service
+      - documentIndex: 0
+        equal:
+          path: spec.replicas
+          value: 2
+      - documentIndex: 0
+        notExists:
+          path: spec.progressDeadlineSeconds
+      - documentIndex: 0
+        notExists:
+          path: spec.strategy
+      - documentIndex: 0
+        equal:
+          path: spec.updateStrategy.type
+          value: RollingUpdate
+      - documentIndex: 0
+        equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: vllm-storage
+      - documentIndex: 0
+        equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 50Gi
+      - documentIndex: 0
+        equal:
+          path: spec.volumeClaimTemplates[0].spec.accessModes[0]
+          value: ReadWriteOnce
+      - documentIndex: 0
+        notExists:
+          path: spec.template.spec.volumes[0]
+      - hasDocuments:
+          count: 1
